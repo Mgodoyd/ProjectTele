@@ -1,0 +1,72 @@
+/* Tipografía */
+@import url("https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap");
+
+body {
+    font-family: "Roboto", sans-serif;
+}
+
+/* Estilos para el encabezado */
+.header {
+    background-color: orange;
+    width: 100%;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    font-size: 100px;
+    font-weight: bold;
+}
+
+/* Estilos para las tarjetas */
+.card {
+    padding: 20px;
+    margin: 10px 0;
+    border-radius: 5px;
+    color: white;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.card-red {
+    background-color: red;
+}
+
+.card-green {
+    background-color: green;
+}
+
+/* Estilos para la tabla */
+.table-container {
+    overflow-x: auto;
+    margin: 20px 0 40px 0;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 20px 0;
+    font-size: 18px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+th,
+td {
+    border: 1px solid #ccc;
+    padding: 12px 15px;
+    text-align: left;
+}
+
+th {
+    background-color: #f4f4f4;
+    font-weight: bold;
+    text-transform: uppercase;
+    text-align: center; /* Centrar el texto de los encabezados */
+}
+
+tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+tr:hover {
+    background-color: #f1f1f1;
+}

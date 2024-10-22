@@ -1,0 +1,37 @@
+<div>
+  <h1 class="header">Control de registro</h1>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th class="column">UUID</th>
+          <th class="column">Ingreso</th>
+          <!-- <th class="column">Recuento</th>
+          <th class="column">Tiempo Transcurrido</th> -->
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let item of data">
+          <td>{{ item.uuid }}</td>
+          <td>
+            <div [ngClass]="{ 'card': true, 'card-red': item.ingreso === false, 'card-green': item.ingreso === true }">
+              {{ item.ingreso ? 'Ingreso Correcto' : 'Salida Correcta' }}
+            </div>
+          </td>
+          <!-- <td>
+            <span *ngIf="item.ingreso"> {{ elapsedTimeMap.get(item.uuid) || 0 }} segundos </span>
+            <span *ngIf="!item.ingreso">reiniciando cronométro...</span>
+          </td>
+          <td>
+            <span *ngIf="item.ingreso">Cronómetro activo</span>
+            <div *ngIf="lastSessionTimeMap.get(item.uuid) && !item.ingreso">
+              <span *ngFor="let time of lastSessionTimeMap.get(item.uuid)">
+                {{ time }} segundos
+              </span>
+            </div>
+          </td> -->
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
