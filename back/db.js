@@ -1,5 +1,5 @@
 const sql = require('mssql');
-const WebSocket = require('ws'); // Asegúrate de importar WebSocket
+const WebSocket = require('ws'); 
 
 // Configuración de la conexión a la base de datos
 const config = {
@@ -83,7 +83,6 @@ async function checkForChanges(wss) {
     }, 5000); // Verificar cada 5 segundos
 }
 
-// Exportar las funciones necesarias
 module.exports = {
     connectToDatabase,
     getAllRegistros,

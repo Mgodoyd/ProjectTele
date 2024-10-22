@@ -2,7 +2,7 @@ import { Component, OnInit, OnDestroy } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { WebSocketServiceService } from './web-socket-service.service';
 import { CommonModule } from '@angular/common';
-import { v4 as uuidv4 } from 'uuid'; // Importar la función para generar UUIDs
+import { v4 as uuidv4 } from 'uuid';
 
 @Component({
   selector: 'app-root',
@@ -12,11 +12,8 @@ import { v4 as uuidv4 } from 'uuid'; // Importar la función para generar UUIDs
   styleUrls: ['./app.component.scss']
 })
 export class AppComponent implements OnInit, OnDestroy {
-  data: any[] = [];
-  previousStateMap = new Map<string, boolean>();
-  intervalMap = new Map<string, any>();
-  elapsedTimeMap = new Map<string, number>();
-  lastSessionTimeMap = new Map<string, number[]>(); // Mapa para guardar los tiempos de las sesiones
+  data: { uuid: string; uuidSesion: string; ingreso: boolean; tiempo: number; cerrado?: boolean }[] = [];
+  activeSessions = new Map<string, any>(); // Para manejar sesiones activas
 
   constructor(private webSocketService: WebSocketServiceService) { }
 
@@ -33,54 +30,63 @@ export class AppComponent implements OnInit, OnDestroy {
     if (message && message.data && message.data.length > 0) {
       message.data.forEach((item: any) => {
         console.log('Handling WebSocket message item:', item);
-        this.data.push(item);
-        this.manageTimers(item);
+
+        if (item.ingreso) {
+          // Usar el UUID que viene del servidor
+          const serverUuid = item.uuid;
+          const uuidSesion = uuidv4();  // Generar un UUID para la sesión si es necesario
+
+          // Agregar el UUID del servidor y el UUID de la sesión
+          this.data.push({
+            uuid: serverUuid,         // Usar el UUID recibido
+            uuidSesion: uuidSesion,   // Generar o usar un UUID para la sesión
+            ingreso: true,
+            tiempo: 0
+          });
+
+          this.startTimer(serverUuid);  // Iniciar el temporizador con el UUID del servidor
+          console.log(`New session started with Server UUID: ${serverUuid}, Session UUID: ${uuidSesion}`);
+        } else {
+          // Manejar la salida
+          const session = this.data.find(s => s.ingreso === true && !s.cerrado);
+          if (session) {
+            this.endSession(session.uuid);
+          }
+        }
       });
     }
   }
 
-  manageTimers(item: any) {
-    const previousState = this.previousStateMap.get(item.uuid);
-    let accumulatedTime = this.elapsedTimeMap.get(item.uuid) || 0;
-    if (item.ingreso) {
-      // Si es un ingreso y no hay cronómetro corriendo o si es un nuevo ingreso después de una salida
-      if (!this.intervalMap.has(item.uuid) || previousState === false) {
-        this.elapsedTimeMap.set(item.uuid, accumulatedTime);
-        const interval = setInterval(() => {
-          accumulatedTime += 1; // Incrementa el tiempo acumulado
-          this.elapsedTimeMap.set(item.uuid, accumulatedTime); // Actualiza el tiempo acumulado en el mapa
-          console.log(`Updated elapsed time for UUID ${item.uuid}: ${accumulatedTime}`);
-        }, 1000);
-        this.intervalMap.set(item.uuid, interval); // Almacenar el intervalo
-        console.log(`Timer started for UUID: ${item.uuid}`);
-      }
-    } else {
-      // Si es una salida, detener el cronómetro
-      const interval = this.intervalMap.get(item.uuid);
-      if (interval) {
-        clearInterval(interval); // Detener el cronómetro
-        this.intervalMap.delete(item.uuid); // Eliminar el intervalo
-        console.log(`Timer stopped for UUID: ${item.uuid}`);
-        // Guardar el tiempo acumulado en el historial de las sesiones
-        const history = this.lastSessionTimeMap.get(item.uuid) || [];
-        history.push(accumulatedTime); // Añadir el tiempo acumulado actual al historial
-        this.lastSessionTimeMap.set(item.uuid, history);
-        console.log(`Final accumulated time for UUID ${item.uuid}: ${accumulatedTime}`);
-        console.log(`Updated history for UUID ${item.uuid}: ${history}`);
-        // Resetear el tiempo acumulado para el siguiente ciclo de ingreso/salida
-        this.elapsedTimeMap.set(item.uuid, 0);
+
+  startTimer(uuid: string) {
+    let accumulatedTime = 0;
+    const interval = setInterval(() => {
+      accumulatedTime += 1; // Incrementa el tiempo acumulado
+      this.data.find(s => s.uuid === uuid)!.tiempo = accumulatedTime; // Actualiza el tiempo en la sesión
+      console.log(`Updated elapsed time for UUID ${uuid}: ${accumulatedTime}`);
+    }, 1000);
+
+    this.activeSessions.set(uuid, interval);
+  }
+
+  endSession(uuid: string) {
+    const interval = this.activeSessions.get(uuid);
+    if (interval) {
+      clearInterval(interval); // Detener el cronómetro
+      this.activeSessions.delete(uuid); // Eliminar el intervalo
+      const session = this.data.find(s => s.uuid === uuid);
+      if (session) {
+        session.ingreso = false; // Marcar como salida
+        console.log(`Session ended for UUID ${uuid}. Time: ${session.tiempo} seconds`);
       }
     }
-    // Actualizar el estado anterior para la próxima verificación
-    this.previousStateMap.set(item.uuid, item.ingreso);
-    console.log(`Updated previous state for UUID ${item.uuid}: ${item.ingreso}`);
   }
 
   ngOnDestroy() {
     console.log('Component destroyed');
     this.webSocketService.disconnect();
     // Limpiar todos los intervalos al destruir el componente
-    this.intervalMap.forEach((interval, uuid) => {
+    this.activeSessions.forEach((interval, uuid) => {
       clearInterval(interval);
       console.log(`Cleared interval for UUID: ${uuid}`);
     });

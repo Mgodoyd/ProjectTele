@@ -1,14 +1,14 @@
 const express = require('express');
-const cors = require('cors'); // Importa el middleware cors
-const WebSocket = require('ws'); // Importa WebSocket
-const { connectToDatabase, checkForChanges } = require('./db'); // Importar funciones de db.js
+const cors = require('cors'); 
+const WebSocket = require('ws'); 
+const { connectToDatabase, checkForChanges } = require('./db'); 
 
 const app = express();
 const port = 3000;
 
 // Configura el middleware cors con opciones específicas
 const corsOptions = {
-    origin: 'http://localhost:4200', // Reemplaza con el origen de tu aplicación cliente
+    origin: 'http://localhost:4200', 
     methods: '*',
     credentials: true,
     optionsSuccessStatus: 204
@@ -22,7 +22,6 @@ const server = app.listen(port, () => {
     console.log(`Servidor HTTP escuchando en http://localhost:${port}`);
 });
 
-// Configura el servidor WebSocket
 const wss = new WebSocket.Server({ server });
 
 // Cuando un cliente se conecta al WebSocket
