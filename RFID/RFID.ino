@@ -1,5 +1,4 @@
 #include <SPI.h>
-// #include <MFRC522v2.h>
 #include <MFRC522.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
@@ -20,8 +19,11 @@ const char* serverUrl = "http://192.168.0.11/Tele/index.php";
 
 unsigned long previousMillis = 0;  // Almacena el último tiempo que se ejecutó
 const long interval = 5000;        // Intervalo de 5 segundos
-MFRC522 rfid(SS_PIN, RST_PIN);
+MFRC522 rfid(SS_PIN, RST_PIN);     // Se cambió de mfrc522 a rfid para ser consistente
+MFRC522::MIFARE_Key key; 
 
+// Init array that will store new NUID 
+byte nuidPICC[4];
 
 void setup() {
   Serial.begin(115200);
@@ -32,6 +34,14 @@ void setup() {
   rfid.PCD_Init();
   Serial.println("Lector RFID iniciado.");
 
+  // Inicializar clave
+  for (byte i = 0; i < 6; i++) {
+    key.keyByte[i] = 0xFF;
+  }
+
+  Serial.println(F("Este código escanea el NUID de una tarjeta MIFARE Clásica."));
+  Serial.print(F("Usando la clave: "));
+  printHex(key.keyByte, MFRC522::MF_KEY_SIZE);
 
   // Conectar a la red Wi-Fi
   WiFi.begin(ssid, password);
@@ -47,46 +57,98 @@ void setup() {
 }
 
 void loop() {
+   // Buscar nuevas tarjetas
+  if (!rfid.PICC_IsNewCardPresent())
+    return;
 
-if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()) {
-    String cardID = getCardID(); // Obtener el ID de la tarjeta
-    int ingreso = 1;  // Aquí puedes cambiar la lógica según sea necesario
+  // Verificar si el NUID ha sido leído
+  if (!rfid.PICC_ReadCardSerial())
+    return;
 
-    Serial.println("Tarjeta detectada!");
-    Serial.println("ID de la tarjeta: " + cardID);
-    Serial.println("Ingreso: " + String(ingreso));
+  Serial.print(F("Tipo de tarjeta: "));
+  MFRC522::PICC_Type piccType = rfid.PICC_GetType(rfid.uid.sak);
+  Serial.println(rfid.PICC_GetTypeName(piccType));
 
-    sendData(cardID, ingreso); // Enviar datos al servidor
-
-    rfid.PICC_HaltA(); // Detener la lectura de la tarjeta
+  // Comprobar si la tarjeta es del tipo MIFARE Classic
+  if (piccType != MFRC522::PICC_TYPE_MIFARE_MINI &&  
+      piccType != MFRC522::PICC_TYPE_MIFARE_1K &&
+      piccType != MFRC522::PICC_TYPE_MIFARE_4K) {
+    Serial.println(F("La etiqueta no es de tipo MIFARE Classic."));
+    return;
   }
 
+  // Comparar si el UID de la tarjeta es nuevo
+  if (rfid.uid.uidByte[0] != nuidPICC[0] || 
+      rfid.uid.uidByte[1] != nuidPICC[1] || 
+      rfid.uid.uidByte[2] != nuidPICC[2] || 
+      rfid.uid.uidByte[3] != nuidPICC[3]) {
 
+    Serial.println(F("Nueva tarjeta detectada."));
 
-  unsigned long currentMillis = millis();  // Obtener el tiempo actual
-
-  // Verificar si ha pasado el intervalo de tiempo
-  if (currentMillis - previousMillis >= interval) {
-    previousMillis = currentMillis;  // Guardar el tiempo actual
-
-    // Enviar datos al servidor
-    //  sendData(cardID, ingreso); // Enviar datos al servid
-  }
-
-  // Aquí puedes agregar otras tareas que necesites realizar
-}
-// Función para obtener el ID de la tarjeta en formato hex
-String getCardID() {
-  String id = "";
-  for (byte i = 0; i < rfid.uid.size; i++) {
-    id += String(rfid.uid.uidByte[i], HEX);
-    if (i < rfid.uid.size - 1) {
-      id += ""; // No agregar separador si no es el último byte
+    // Almacenar el NUID en el array nuidPICC
+    for (byte i = 0; i < 4; i++) {
+      nuidPICC[i] = rfid.uid.uidByte[i];
     }
+
+    Serial.println(F("El NUID de la tarjeta es:"));
+    Serial.print(F("En hexadecimal: "));
+    printHex(rfid.uid.uidByte, rfid.uid.size);
+    Serial.println();
+    Serial.print(F("En decimal: "));
+    printDec(rfid.uid.uidByte, rfid.uid.size);
+    Serial.println();
+    
+
+    // Convertir el UID a String para el envío
+    String cardID = "";
+    for (byte i = 0; i < rfid.uid.size; i++) {
+      cardID += String(rfid.uid.uidByte[i], HEX);
+    }
+    
+    // Verifica si ha pasado el intervalo de tiempo
+    unsigned long currentMillis = millis();
+    if (currentMillis - previousMillis >= interval) {
+      previousMillis = currentMillis;  // Guardar el tiempo actual
+
+      // Definir el valor de ingreso (puedes cambiar la lógica según sea necesario)
+      int ingreso = 1;  // Por defecto lo dejamos como 1
+
+      // Enviar datos al servidor
+      sendData(cardID, ingreso);  // Se utiliza cardID y el valor de ingreso
+    }
+
+  } else {
+    Serial.println(F("Tarjeta leída previamente."));
   }
-  return id;
+
+  // Detener la tarjeta PICC
+  rfid.PICC_HaltA();
+
+  // Detener cifrado en el lector
+  rfid.PCD_StopCrypto1();
 }
 
+/**
+ * Función auxiliar para mostrar un array de bytes en hexadecimal
+ */
+void printHex(byte *buffer, byte bufferSize) {
+  for (byte i = 0; i < bufferSize; i++) {
+    Serial.print(buffer[i] < 0x10 ? " 0" : " ");
+    Serial.print(buffer[i], HEX);
+  }
+}
+
+/**
+ * Función auxiliar para mostrar un array de bytes en decimal
+ */
+void printDec(byte *buffer, byte bufferSize) {
+  for (byte i = 0; i < bufferSize; i++) {
+    Serial.print(buffer[i] < 0x10 ? " 0" : " ");
+    Serial.print(buffer[i], DEC);
+  }
+}
+
+// Función para enviar datos al servidor
 void sendData(String cardID, int ingreso) {
     if (WiFi.status() == WL_CONNECTED) {
         HTTPClient http;
@@ -112,6 +174,7 @@ void sendData(String cardID, int ingreso) {
         } else {
             Serial.print("Error al enviar POST, código: ");
             Serial.println(httpCode);
+            Serial.println(http.errorToString(httpCode));
         }
 
         http.end();
