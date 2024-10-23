@@ -2,6 +2,7 @@
 #include <MFRC522.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include <map>  // Biblioteca para mapear UIDs a estados
 
 // Definición de pines
 #define RST_PIN 22
@@ -22,8 +23,8 @@ const long interval = 5000;        // Intervalo de 5 segundos
 MFRC522 rfid(SS_PIN, RST_PIN);     // Se cambió de mfrc522 a rfid para ser consistente
 MFRC522::MIFARE_Key key; 
 
-// Init array that will store new NUID 
-byte nuidPICC[4];
+// Map para guardar el estado de ingreso/salida de cada tarjeta
+std::map<String, int> tarjetasEstado;  // Almacena el estado de cada tarjeta por su UID
 
 void setup() {
   Serial.begin(115200);
@@ -61,7 +62,7 @@ void loop() {
   if (!rfid.PICC_IsNewCardPresent())
     return;
 
-  // Verificar si el NUID ha sido leído
+  // Verificar si la tarjeta ha sido leída
   if (!rfid.PICC_ReadCardSerial())
     return;
 
@@ -77,48 +78,39 @@ void loop() {
     return;
   }
 
-  // Comparar si el UID de la tarjeta es nuevo
-  if (rfid.uid.uidByte[0] != nuidPICC[0] || 
-      rfid.uid.uidByte[1] != nuidPICC[1] || 
-      rfid.uid.uidByte[2] != nuidPICC[2] || 
-      rfid.uid.uidByte[3] != nuidPICC[3]) {
+  Serial.println(F("Tarjeta detectada."));
 
-    Serial.println(F("Nueva tarjeta detectada."));
+  // Convertir el UID de la tarjeta a String
+  String cardID = "";
+  for (byte i = 0; i < rfid.uid.size; i++) {
+    cardID += String(rfid.uid.uidByte[i], HEX);
+  }
 
-    // Almacenar el NUID en el array nuidPICC
-    for (byte i = 0; i < 4; i++) {
-      nuidPICC[i] = rfid.uid.uidByte[i];
+  Serial.println(F("El NUID de la tarjeta es:"));
+  Serial.print(F("En hexadecimal: "));
+  printHex(rfid.uid.uidByte, rfid.uid.size);
+  Serial.println();
+  Serial.print(F("En decimal: "));
+  printDec(rfid.uid.uidByte, rfid.uid.size);
+  Serial.println();
+
+  // Verifica si ha pasado el intervalo de tiempo
+  unsigned long currentMillis = millis();
+  if (currentMillis - previousMillis >= interval) {
+    previousMillis = currentMillis;  // Guardar el tiempo actual
+
+    // Determinar el estado de la tarjeta actual (ingreso o salida)
+    int ingreso = 1;  // Por defecto, ingreso
+    if (tarjetasEstado.find(cardID) != tarjetasEstado.end()) {
+      // Si la tarjeta ya ha sido leída, alternar el estado
+      ingreso = tarjetasEstado[cardID] == 1 ? 0 : 1;
     }
-
-    Serial.println(F("El NUID de la tarjeta es:"));
-    Serial.print(F("En hexadecimal: "));
-    printHex(rfid.uid.uidByte, rfid.uid.size);
-    Serial.println();
-    Serial.print(F("En decimal: "));
-    printDec(rfid.uid.uidByte, rfid.uid.size);
-    Serial.println();
     
+    // Actualizar el estado de la tarjeta en el mapa
+    tarjetasEstado[cardID] = ingreso;
 
-    // Convertir el UID a String para el envío
-    String cardID = "";
-    for (byte i = 0; i < rfid.uid.size; i++) {
-      cardID += String(rfid.uid.uidByte[i], HEX);
-    }
-    
-    // Verifica si ha pasado el intervalo de tiempo
-    unsigned long currentMillis = millis();
-    if (currentMillis - previousMillis >= interval) {
-      previousMillis = currentMillis;  // Guardar el tiempo actual
-
-      // Definir el valor de ingreso (puedes cambiar la lógica según sea necesario)
-      int ingreso = 1;  // Por defecto lo dejamos como 1
-
-      // Enviar datos al servidor
-      sendData(cardID, ingreso);  // Se utiliza cardID y el valor de ingreso
-    }
-
-  } else {
-    Serial.println(F("Tarjeta leída previamente."));
+    // Enviar el estado actual de ingreso o salida al servidor
+    sendData(cardID, ingreso);
   }
 
   // Detener la tarjeta PICC
@@ -158,7 +150,8 @@ void sendData(String cardID, int ingreso) {
         http.begin(serverUrl);
         http.addHeader("Content-Type", "application/x-www-form-urlencoded");
 
-        String dataToSend = "uuid=" + cardID + "&ingreso=" + ingreso;
+        // Enviar el UUID de la tarjeta y el estado de ingreso/salida
+        String dataToSend = "uuid=" + cardID + "&ingreso=" + String(ingreso);
         Serial.println(dataToSend);
 
         int httpCode = http.POST(dataToSend);
